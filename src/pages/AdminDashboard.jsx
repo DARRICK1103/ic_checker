@@ -40,8 +40,12 @@ export default function AdminDashboard() {
   }, [user]);
 
   const fetchParties = async () => {
-    const { data } = await supabase.from("parties").select("*").order("name");
-    setParties(data || []);
+    const { data: partiesData } = await supabase
+      .from("parties")
+      .select("*, event_limits(limits, event_id, events(name))")
+      .order("name");
+
+    setParties(partiesData || []);
   };
 
   const fetchEvents = async () => {
@@ -104,13 +108,76 @@ export default function AdminDashboard() {
     fetchRegistrations();
   };
 
+  const insertEventLimits = async (partyId, limits) => {
+    // Get event IDs from the events table
+    const { data: events, error: eventError } = await supabase
+      .from("events")
+      .select("id, name");
+
+    if (eventError) {
+      alert("Failed to fetch events: " + eventError.message);
+      return;
+    }
+
+    const rows = [];
+
+    for (const [eventName, limit] of Object.entries(limits)) {
+      const event = events.find((e) => e.name === eventName);
+      if (!event) continue;
+      rows.push({
+        party_id: partyId,
+        event_id: event.id,
+        limits: limit,
+      });
+    }
+
+    if (rows.length === 0) return;
+
+    const { error: insertError } = await supabase
+      .from("event_limits")
+      .insert(rows);
+
+    if (insertError) {
+      alert("Error inserting limits: " + insertError.message);
+    } else {
+      console.log("Event limits inserted:", rows);
+    }
+  };
+
   const addParty = async () => {
     if (!partyName) return;
+
+    const limitStage = prompt("Set limit for TheStage7.0:");
+    const limitBlast = prompt("Set limit for Blast Your Stage:");
+
     const slug = partyName.toLowerCase().replace(/\s+/g, "-");
-    const { error } = await supabase
+
+    const { error: insertError } = await supabase
       .from("parties")
       .insert([{ name: partyName, slug }]);
-    if (error) alert(error.message);
+
+    if (insertError) {
+      alert(insertError.message);
+      return;
+    }
+
+    // ⚠️ Don't redeclare `const { ... }`, use different name
+    const { data: partyData, error: fetchError } = await supabase
+      .from("parties")
+      .select("id")
+      .eq("slug", slug)
+      .single();
+
+    if (fetchError) {
+      alert(fetchError.message);
+      return;
+    }
+
+    await insertEventLimits(partyData.id, {
+      "TheStage7.0": parseInt(limitStage),
+      "Blast Your Stage": parseInt(limitBlast),
+    });
+
     setPartyName("");
     fetchParties();
   };
@@ -199,7 +266,6 @@ export default function AdminDashboard() {
             type="text"
             value={partyName}
             onChange={(e) => setPartyName(e.target.value)}
-   
           />
           <button style={btn} onClick={addParty}>
             Add
@@ -211,32 +277,47 @@ export default function AdminDashboard() {
               <tr>
                 <th style={thTdStyle}>ID</th>
                 <th style={thTdStyle}>Party Name</th>
+                <th style={thTdStyle}>TheStage7.0 Limit</th>
+                <th style={thTdStyle}>Blast Your Stage Limit</th>
                 <th style={thTdStyle}>Form Link</th>
                 <th style={thTdStyle}>Copy</th>
               </tr>
             </thead>
+
             <tbody>
-              {parties.map((p, idx) => (
-                <tr key={p.id}>
-                  <td style={thTdStyle}>{idx + 1}</td>
-                  <td style={thTdStyle}>{p.name}</td>
-                  <td style={thTdStyle}>
-                    <code>{`${window.location.origin}/form/${p.slug}`}</code>
-                  </td>
-                  <td style={thTdStyle}>
-                    <button
-                      style={flatBtn}
-                      onClick={() =>
-                        navigator.clipboard.writeText(
-                          `${window.location.origin}/form/${p.slug}`
-                        )
-                      }
-                    >
-                      Copy
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {parties.map((p, idx) => {
+                const limitStage = p.event_limits?.find(
+                  (el) => el.events?.name === "TheStage7.0"
+                )?.limits;
+
+                const limitBlast = p.event_limits?.find(
+                  (el) => el.events?.name === "Blast Your Stage"
+                )?.limits;
+
+                return (
+                  <tr key={p.id}>
+                    <td style={thTdStyle}>{idx + 1}</td>
+                    <td style={thTdStyle}>{p.name}</td>
+                    <td style={thTdStyle}>{limitStage ?? "—"}</td>
+                    <td style={thTdStyle}>{limitBlast ?? "—"}</td>
+                    <td style={thTdStyle}>
+                      <code>{`${window.location.origin}/form/${p.slug}`}</code>
+                    </td>
+                    <td style={thTdStyle}>
+                      <button
+                        style={flatBtn}
+                        onClick={() =>
+                          navigator.clipboard.writeText(
+                            `${window.location.origin}/form/${p.slug}`
+                          )
+                        }
+                      >
+                        Copy
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -244,22 +325,20 @@ export default function AdminDashboard() {
 
       {activeTab === "registrations" && (
         <div>
-  <div style={{ marginBottom: "1.5rem" }}>
-  <div style={{
-    padding: "10px",
-    backgroundColor: "#f7f7f7",
-    border: "1px solid #ddd",
-    borderRadius: "6px",
-    marginBottom: "0.75rem",
-    fontWeight: "bold"
-  }}>
-    Total Registration Rows: {registrations.length}
-
-  </div>
-
-  
-</div>
-
+          <div style={{ marginBottom: "1.5rem" }}>
+            <div
+              style={{
+                padding: "10px",
+                backgroundColor: "#f7f7f7",
+                border: "1px solid #ddd",
+                borderRadius: "6px",
+                marginBottom: "0.75rem",
+                fontWeight: "bold",
+              }}
+            >
+              Total Registration Rows: {registrations.length}
+            </div>
+          </div>
 
           <div style={{ margin: "1rem 0" }}>
             <input

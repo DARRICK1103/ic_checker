@@ -30,71 +30,93 @@ export default function PartyForm() {
     }
   };
 
-  const handleSubmit = async () => {
-    setClicked(true);
-    setTimeout(() => setClicked(false), 150);
+const handleSubmit = async () => {
+  setClicked(true);
+  setTimeout(() => setClicked(false), 150);
 
-    const cleanedIC = ic.replace(/-/g, "");
+  const cleanedIC = ic.replace(/-/g, "");
 
-    if (/[a-zA-Z]/.test(cleanedIC)) {
-      return setModal({ show: true, success: false, message: "❌ IC must not contain letters!" });
+  if (/[a-zA-Z]/.test(cleanedIC)) {
+    return setModal({ show: true, success: false, message: "❌ IC must not contain letters!" });
+  }
+
+  if (cleanedIC.length !== 12 || !/^\d{12}$/.test(cleanedIC)) {
+    return setModal({ show: true, success: false, message: "❌ IC must be exactly 12 digits!" });
+  }
+
+  if (!phone || selectedEvents.length === 0 || !party) {
+    return setModal({ show: true, success: false, message: "❌ Please complete all fields." });
+  }
+
+  const { data: existingRegs } = await supabase
+    .from("registrations")
+    .select("event_id")
+    .eq("ic_number", cleanedIC);
+
+  const existingEventIds = existingRegs.map(r => r.event_id);
+  const alreadySelected = selectedEvents.filter(id => existingEventIds.includes(id));
+
+  if (alreadySelected.length > 0) {
+    const { data: dupeEvents } = await supabase
+      .from("events")
+      .select("name")
+      .in("id", alreadySelected);
+    return setModal({
+      show: true,
+      success: false,
+      message: `❌ IC has already registered for: ${dupeEvents.map(e => e.name).join(", ")}`,
+    });
+  }
+
+  if (existingEventIds.length + selectedEvents.length > 2) {
+    return setModal({
+      show: true,
+      success: false,
+      message: `❌ IC can only register for up to 2 events in total.`,
+    });
+  }
+
+  // Proceed with insert for each selected event
+  const inserts = selectedEvents.map(eventId => ({
+    ic_number: cleanedIC,
+    phone_number: phone,
+    party_id: party.id,
+    event_id: eventId,
+  }));
+
+  const { error: insertError } = await supabase.from("registrations").insert(inserts);
+  if (insertError) {
+    return setModal({ show: true, success: false, message: insertError.message });
+  }
+
+  // ✅ Deduct limit after successful registration
+  for (const eventId of selectedEvents) {
+    const { data: limitData, error: fetchError } = await supabase
+      .from("event_limits")
+      .select("id, limits")
+      .eq("party_id", party.id)
+      .eq("event_id", eventId)
+      .single();
+
+    if (fetchError || !limitData) {
+      console.error("Failed to fetch event limit:", fetchError?.message);
+      continue;
     }
 
-    if (cleanedIC.length !== 12 || !/^\d{12}$/.test(cleanedIC)) {
-      return setModal({ show: true, success: false, message: "❌ IC must be exactly 12 digits!" });
-    }
+    const newLimit = (limitData.limits ?? 0) - 1;
 
-    if (!phone || selectedEvents.length === 0 || !party) {
-      return setModal({ show: true, success: false, message: "❌ Please complete all fields." });
-    }
+    await supabase
+      .from("event_limits")
+      .update({ limits: newLimit < 0 ? 0 : newLimit })
+      .eq("id", limitData.id);
+  }
 
-    const { data: existingRegs } = await supabase
-      .from("registrations")
-      .select("event_id")
-      .eq("ic_number", cleanedIC);
+  setModal({ show: true, success: true, message: "✅ Registration Successful!" });
+  setIC("");
+  setPhone("");
+  setSelectedEvents([]);
+};
 
-    const existingEventIds = existingRegs.map(r => r.event_id);
-    const alreadySelected = selectedEvents.filter(id => existingEventIds.includes(id));
-
-    if (alreadySelected.length > 0) {
-      const { data: dupeEvents } = await supabase
-        .from("events")
-        .select("name")
-        .in("id", alreadySelected);
-      return setModal({
-        show: true,
-        success: false,
-        message: `❌ IC has already registered for: ${dupeEvents.map(e => e.name).join(", ")}`,
-      });
-    }
-
-    if (existingEventIds.length + selectedEvents.length > 2) {
-      return setModal({
-        show: true,
-        success: false,
-        message: `❌ IC can only register for up to 2 events in total.`,
-      });
-    }
-
-    // Proceed with insert for each selected event
-    const inserts = selectedEvents.map(eventId => ({
-      ic_number: cleanedIC,
-      phone_number: phone,
-      party_id: party.id,
-      event_id: eventId,
-    }));
-
-    const { error: insertError } = await supabase.from("registrations").insert(inserts);
-
-    if (insertError) {
-      return setModal({ show: true, success: false, message: insertError.message });
-    }
-
-    setModal({ show: true, success: true, message: "✅ Registration Successful!" });
-    setIC("");
-    setPhone("");
-    setSelectedEvents([]);
-  };
 
   if (!party) return <p style={styles.message}>Loading...</p>;
 

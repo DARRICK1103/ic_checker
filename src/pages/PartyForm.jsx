@@ -10,11 +10,19 @@ export default function PartyForm() {
   const [ic, setIC] = useState("");
   const [phone, setPhone] = useState("");
   const [clicked, setClicked] = useState(false);
-  const [modal, setModal] = useState({ show: false, success: true, message: "" });
+  const [modal, setModal] = useState({
+    show: false,
+    success: true,
+    message: "",
+  });
 
   useEffect(() => {
     async function fetchData() {
-      const { data: partyData } = await supabase.from("parties").select("*").eq("slug", slug).single();
+      const { data: partyData } = await supabase
+        .from("parties")
+        .select("*")
+        .eq("slug", slug)
+        .single();
       const { data: eventData } = await supabase.from("events").select("*");
       setParty(partyData);
       setEvents(eventData || []);
@@ -24,107 +32,161 @@ export default function PartyForm() {
 
   const toggleEvent = (eventId) => {
     if (selectedEvents.includes(eventId)) {
-      setSelectedEvents(selectedEvents.filter(id => id !== eventId));
+      setSelectedEvents(selectedEvents.filter((id) => id !== eventId));
     } else {
       setSelectedEvents([...selectedEvents, eventId]);
     }
   };
 
-const handleSubmit = async () => {
-  setClicked(true);
-  setTimeout(() => setClicked(false), 150);
+  const handleSubmit = async () => {
+    setClicked(true);
+    setTimeout(() => setClicked(false), 150);
 
-  const cleanedIC = ic.replace(/-/g, "");
+    const cleanedIC = ic.replace(/-/g, "");
 
-  if (/[a-zA-Z]/.test(cleanedIC)) {
-    return setModal({ show: true, success: false, message: "❌ IC must not contain letters!" });
-  }
-
-  if (cleanedIC.length !== 12 || !/^\d{12}$/.test(cleanedIC)) {
-    return setModal({ show: true, success: false, message: "❌ IC must be exactly 12 digits!" });
-  }
-
-  if (!phone || selectedEvents.length === 0 || !party) {
-    return setModal({ show: true, success: false, message: "❌ Please complete all fields." });
-  }
-
-  const { data: existingRegs } = await supabase
-    .from("registrations")
-    .select("event_id")
-    .eq("ic_number", cleanedIC);
-
-  const existingEventIds = existingRegs.map(r => r.event_id);
-  const alreadySelected = selectedEvents.filter(id => existingEventIds.includes(id));
-
-  if (alreadySelected.length > 0) {
-    const { data: dupeEvents } = await supabase
-      .from("events")
-      .select("name")
-      .in("id", alreadySelected);
-    return setModal({
-      show: true,
-      success: false,
-      message: `❌ IC has already registered for: ${dupeEvents.map(e => e.name).join(", ")}`,
-    });
-  }
-
-  if (existingEventIds.length + selectedEvents.length > 2) {
-    return setModal({
-      show: true,
-      success: false,
-      message: `❌ IC can only register for up to 2 events in total.`,
-    });
-  }
-
-  // Proceed with insert for each selected event
-  const inserts = selectedEvents.map(eventId => ({
-    ic_number: cleanedIC,
-    phone_number: phone,
-    party_id: party.id,
-    event_id: eventId,
-  }));
-
-  const { error: insertError } = await supabase.from("registrations").insert(inserts);
-  if (insertError) {
-    return setModal({ show: true, success: false, message: insertError.message });
-  }
-
-  // ✅ Deduct limit after successful registration
-  for (const eventId of selectedEvents) {
-    const { data: limitData, error: fetchError } = await supabase
-      .from("event_limits")
-      .select("id, limits")
-      .eq("party_id", party.id)
-      .eq("event_id", eventId)
-      .single();
-
-    if (fetchError || !limitData) {
-      console.error("Failed to fetch event limit:", fetchError?.message);
-      continue;
+    if (/[a-zA-Z]/.test(cleanedIC)) {
+      return setModal({
+        show: true,
+        success: false,
+        message: "❌ IC must not contain letters!",
+      });
     }
 
-    const newLimit = (limitData.limits ?? 0) - 1;
+    if (cleanedIC.length !== 12 || !/^\d{12}$/.test(cleanedIC)) {
+      return setModal({
+        show: true,
+        success: false,
+        message: "❌ IC must be exactly 12 digits!",
+      });
+    }
 
-    await supabase
-      .from("event_limits")
-      .update({ limits: newLimit < 0 ? 0 : newLimit })
-      .eq("id", limitData.id);
-  }
+    if (!phone || selectedEvents.length === 0 || !party) {
+      return setModal({
+        show: true,
+        success: false,
+        message: "❌ Please complete all fields.",
+      });
+    }
 
-  setModal({ show: true, success: true, message: "✅ Registration Successful!" });
-  setIC("");
-  setPhone("");
-  setSelectedEvents([]);
-};
+    const { data: existingRegs } = await supabase
+      .from("registrations")
+      .select("event_id")
+      .eq("ic_number", cleanedIC);
 
+    const existingEventIds = existingRegs.map((r) => r.event_id);
+    const alreadySelected = selectedEvents.filter((id) =>
+      existingEventIds.includes(id)
+    );
+
+    if (alreadySelected.length > 0) {
+      const { data: dupeEvents } = await supabase
+        .from("events")
+        .select("name")
+        .in("id", alreadySelected);
+      return setModal({
+        show: true,
+        success: false,
+        message: `❌ IC has already registered for: ${dupeEvents
+          .map((e) => e.name)
+          .join(", ")}`,
+      });
+    }
+
+    if (existingEventIds.length + selectedEvents.length > 2) {
+      return setModal({
+        show: true,
+        success: false,
+        message: `❌ IC can only register for up to 2 events in total.`,
+      });
+    }
+
+    // ✅ Check if limit for each selected event is available
+    for (const eventId of selectedEvents) {
+      const { data: limitData, error: fetchError } = await supabase
+        .from("event_limits")
+        .select("id, limits")
+        .eq("party_id", party.id)
+        .eq("event_id", eventId)
+        .single();
+
+      if (fetchError || !limitData) {
+        return setModal({
+          show: true,
+          success: false,
+          message: `❌ Failed to fetch limit for event ID ${eventId}.`,
+        });
+      }
+      // If limit is reached, show error
+      console.log("Fetched limitData:", limitData);
+      console.log("Fetch error:", fetchError);
+      if ((limitData.limits ?? 0) <= 0) {
+        const { data: eventNameData } = await supabase
+          .from("events")
+          .select("name")
+          .eq("id", eventId)
+          .single();
+
+        return setModal({
+          show: true,
+          success: false,
+          message: `❌ Limit reached for "${
+            eventNameData?.name || "Unknown"
+          }".`,
+        });
+      }
+    }
+
+    // ✅ Proceed with insert
+    const inserts = selectedEvents.map((eventId) => ({
+      ic_number: cleanedIC,
+      phone_number: phone,
+      party_id: party.id,
+      event_id: eventId,
+    }));
+
+    const { error: insertError } = await supabase
+      .from("registrations")
+      .insert(inserts);
+    if (insertError) {
+      return setModal({
+        show: true,
+        success: false,
+        message: insertError.message,
+      });
+    }
+
+    // ✅ Deduct limit
+    for (const eventId of selectedEvents) {
+      const { data: limitData } = await supabase
+        .from("event_limits")
+        .select("id, limits")
+        .eq("party_id", party.id)
+        .eq("event_id", eventId)
+        .single();
+
+      const newLimit = (limitData.limits ?? 0) - 1;
+
+      await supabase
+        .from("event_limits")
+        .update({ limits: newLimit < 0 ? 0 : newLimit })
+        .eq("id", limitData.id);
+    }
+
+    setModal({
+      show: true,
+      success: true,
+      message: "✅ Registration Successful!",
+    });
+    setIC("");
+    setPhone("");
+    setSelectedEvents([]);
+  };
 
   if (!party) return <p style={styles.message}>Loading...</p>;
 
   return (
     <div style={styles.container}>
       <h2 style={styles.heading}>The Stage Sibu Registration</h2>
-
-    
 
       <input
         placeholder="IC Number"
@@ -139,7 +201,7 @@ const handleSubmit = async () => {
         style={styles.input}
       />
 
-        <div style={{ marginBottom: 20, textAlign: "left" }}>
+      <div style={{ marginBottom: 20, textAlign: "left" }}>
         {events.map((event) => (
           <label key={event.id} style={{ display: "block", marginBottom: 10 }}>
             <input
@@ -166,10 +228,18 @@ const handleSubmit = async () => {
       {modal.show && (
         <div style={styles.modalOverlay}>
           <div style={styles.modalBox}>
-            <p style={{ ...styles.modalText, color: modal.success ? "green" : "red" }}>
+            <p
+              style={{
+                ...styles.modalText,
+                color: modal.success ? "green" : "red",
+              }}
+            >
               {modal.message}
             </p>
-            <button onClick={() => setModal({ ...modal, show: false })} style={styles.modalButton}>
+            <button
+              onClick={() => setModal({ ...modal, show: false })}
+              style={styles.modalButton}
+            >
               OK
             </button>
           </div>

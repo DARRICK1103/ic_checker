@@ -324,121 +324,137 @@ export default function AdminDashboard() {
       )}
 
       {activeTab === "registrations" && (
-        <div>
-          <div style={{ marginBottom: "1.5rem" }}>
-            <div
-              style={{
-                padding: "10px",
-                backgroundColor: "#f7f7f7",
-                border: "1px solid #ddd",
-                borderRadius: "6px",
-                marginBottom: "0.75rem",
-                fontWeight: "bold",
-              }}
-            >
-              Total Registration Rows: {registrations.length}
-            </div>
-          </div>
+  <div>
+    <div style={{ marginBottom: "1.5rem" }}>
+      <div
+        style={{
+          padding: "10px",
+          backgroundColor: "#f7f7f7",
+          border: "1px solid #ddd",
+          borderRadius: "6px",
+          marginBottom: "0.75rem",
+          fontWeight: "bold",
+        }}
+      >
+        Total Registration Rows: {registrations.length}
+      </div>
+    </div>
 
-          <div style={{ margin: "1rem 0" }}>
-            <input
-              style={inputStyle}
-              type="text"
-              placeholder="Search IC or phone..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            <button style={flatBtn} onClick={handleSearch}>
-              Search
-            </button>
-            <button
-              style={btn}
-              onClick={() => {
-                setSearchTerm("");
-                fetchRegistrations();
-              }}
-            >
-              Reset
-            </button>
-          </div>
+    <div style={{ margin: "1rem 0" }}>
+      <input
+        style={inputStyle}
+        type="text"
+        placeholder="Search IC or phone..."
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+      />
+      <button style={flatBtn} onClick={handleSearch}>
+        Search
+      </button>
+      <button
+        style={btn}
+        onClick={() => {
+          setSearchTerm("");
+          fetchRegistrations();
+        }}
+      >
+        Reset
+      </button>
+    </div>
 
-          <table style={tableStyle}>
-            <thead>
-              <tr>
-                <th style={thTdStyle}>ID</th>
-                <th style={thTdStyle}>IC</th>
-                <th style={thTdStyle}>Phone</th>
-                <th style={thTdStyle}>Party</th>
-                <th style={thTdStyle}>Event</th>
-                <th style={thTdStyle}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {registrations.map((r, idx) => (
-                <tr key={r.id}>
-                  <td style={thTdStyle}>{idx + 1}</td>
-                  <td style={thTdStyle}>
-                    {editId === r.id ? (
-                      <input
-                        style={inputStyle}
-                        value={editIC}
-                        onChange={(e) => setEditIC(e.target.value)}
-                      />
-                    ) : (
-                      r.ic_number
-                    )}
-                  </td>
-                  <td style={thTdStyle}>
-                    {editId === r.id ? (
-                      <input
-                        style={inputStyle}
-                        value={editPhone}
-                        onChange={(e) => setEditPhone(e.target.value)}
-                      />
-                    ) : (
-                      r.phone_number
-                    )}
-                  </td>
-                  <td style={thTdStyle}>{r.parties?.name || "—"}</td>
-                  <td style={thTdStyle}>{r.events?.name || "—"}</td>
-                  <td style={thTdStyle}>
-                    {editId === r.id ? (
-                      <>
-                        <button style={btn} onClick={() => saveEdit(r.id)}>
-                          💾 Save
-                        </button>
-                        <button style={flatBtn} onClick={() => setEditId(null)}>
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          style={flatBtn}
-                          onClick={() => {
-                            setEditId(r.id);
-                            setEditIC(r.ic_number);
-                            setEditPhone(r.phone_number);
-                            setEditEventId(r.event_id);
-                          }}
-                        >
-                          ✏️ Edit
-                        </button>
-                        <button
-                          style={flatBtn}
-                          onClick={() => deleteById(r.id)}
-                        >
-                          🗑 Delete
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+    <table style={tableStyle}>
+      <thead>
+        <tr>
+          <th style={thTdStyle}>ID</th>
+          <th style={thTdStyle}>Ticket</th> {/* New column */}
+          <th style={thTdStyle}>IC</th>
+          <th style={thTdStyle}>Phone</th>
+          <th style={thTdStyle}>Party</th>
+          <th style={thTdStyle}>Event</th>
+          <th style={thTdStyle}>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {registrations.map((r, idx) => (
+          <tr key={r.id}>
+            <td style={thTdStyle}>{idx + 1}</td>
+
+            {/* ✅ Redeem Tickets checkbox */}
+            <td style={thTdStyle}>
+              <input
+                type="checkbox"
+                checked={r.redeem_ticket || false}
+                onChange={async (e) => {
+                  const newValue = e.target.checked;
+                  await supabase
+                    .from("registrations")
+                    .update({ redeem_ticket: newValue })
+                    .eq("id", r.id);
+                  fetchRegistrations(); // refresh
+                }}
+              />
+            </td>
+
+            <td style={thTdStyle}>
+              {editId === r.id ? (
+                <input
+                  style={inputStyle}
+                  value={editIC}
+                  onChange={(e) => setEditIC(e.target.value)}
+                />
+              ) : (
+                r.ic_number
+              )}
+            </td>
+            <td style={thTdStyle}>
+              {editId === r.id ? (
+                <input
+                  style={inputStyle}
+                  value={editPhone}
+                  onChange={(e) => setEditPhone(e.target.value)}
+                />
+              ) : (
+                r.phone_number
+              )}
+            </td>
+            <td style={thTdStyle}>{r.parties?.name || "—"}</td>
+            <td style={thTdStyle}>{r.events?.name || "—"}</td>
+            <td style={thTdStyle}>
+              {editId === r.id ? (
+                <>
+                  <button style={btn} onClick={() => saveEdit(r.id)}>
+                    💾 Save
+                  </button>
+                  <button style={flatBtn} onClick={() => setEditId(null)}>
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    style={flatBtn}
+                    onClick={() => {
+                      setEditId(r.id);
+                      setEditIC(r.ic_number);
+                      setEditPhone(r.phone_number);
+                      setEditEventId(r.event_id);
+                    }}
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button style={flatBtn} onClick={() => deleteById(r.id)}>
+                    🗑 Delete
+                  </button>
+                </>
+              )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+)}
+
     </div>
   );
 }

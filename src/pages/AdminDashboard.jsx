@@ -55,39 +55,93 @@ export default function AdminDashboard() {
     setEventsMap(map);
   };
 
-  const fetchRegistrations = async () => {
-    const { data } = await supabase
+const fetchRegistrations = async () => {
+  const chunkSize = 1000; // Supabase hard cap per request
+  let allData = [];
+  let from = 0;
+  let to = chunkSize - 1;
+
+  while (true) {
+    const { data, error } = await supabase
       .from("registrations")
       .select("*, parties(name), events(id, name)")
-      .order("id", { ascending: true });
+      .order("id", { ascending: true })
+      .range(from, to);
 
-    setRegistrations(data || []);
-
-    // Count registrations per event
-    const counts = {};
-    for (const reg of data || []) {
-      const eventName = reg.events?.name;
-      if (eventName) {
-        counts[eventName] = (counts[eventName] || 0) + 1;
-      }
+    if (error) {
+      console.error("Error fetching registrations:", error.message);
+      break;
     }
-    setEventCounts(counts);
-  };
+
+    if (!data || data.length === 0) {
+      break; // no more rows
+    }
+
+    allData = [...allData, ...data];
+
+    if (data.length < chunkSize || allData.length >= 10000) {
+      break; // stop when fewer than chunkSize returned OR hit 10k cap
+    }
+
+    from += chunkSize;
+    to += chunkSize;
+  }
+
+  setRegistrations(allData);
+
+  // Count registrations per event
+  const counts = {};
+  for (const reg of allData) {
+    const eventName = reg.events?.name;
+    if (eventName) {
+      counts[eventName] = (counts[eventName] || 0) + 1;
+    }
+  }
+  setEventCounts(counts);
+};
+
 
   const handleSearch = async () => {
-    const { data } = await supabase
+  const chunkSize = 1000;
+  let allData = [];
+  let from = 0;
+  let to = chunkSize - 1;
+
+  while (true) {
+    const { data, error } = await supabase
       .from("registrations")
       .select("*, parties(name), events(id, name)")
-      .order("id", { ascending: true });
+      .order("id", { ascending: true })
+      .range(from, to);
 
-    const filtered = (data || []).filter(
-      (r) =>
-        r.ic_number?.includes(searchTerm) ||
-        r.phone_number?.includes(searchTerm)
-    );
+    if (error) {
+      console.error("Search error:", error.message);
+      break;
+    }
 
-    setRegistrations(filtered);
-  };
+    if (!data || data.length === 0) {
+      break;
+    }
+
+    allData = [...allData, ...data];
+
+    if (data.length < chunkSize || allData.length >= 10000) {
+      break;
+    }
+
+    from += chunkSize;
+    to += chunkSize;
+  }
+
+  const filtered = allData.filter(
+    (r) =>
+      r.ic_number?.includes(searchTerm) ||
+      r.phone_number?.includes(searchTerm)
+  );
+
+  setRegistrations(filtered);
+};
+
 
   const saveEdit = async (id) => {
     await supabase

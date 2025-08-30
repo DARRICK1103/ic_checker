@@ -5,6 +5,8 @@ import Login from "./Login";
 
 export default function AdminDashboard() {
   const { user } = useAuth();
+  const [showRedeemed, setShowRedeemed] = useState(false);
+  const [showNotRedeemed, setShowNotRedeemed] = useState(false);
 
   const [activeTab, setActiveTab] = useState("parties");
   const [parties, setParties] = useState([]);
@@ -144,6 +146,16 @@ export default function AdminDashboard() {
     if (selectedParty !== "All") {
       filtered = filtered.filter((r) => r.parties?.name === selectedParty);
     }
+
+    // ✅ Redeem_ticket filter logic
+    if (showRedeemed && !showNotRedeemed) {
+      filtered = filtered.filter((r) => r.redeem_ticket === true);
+    } else if (!showRedeemed && showNotRedeemed) {
+      filtered = filtered.filter(
+        (r) => r.redeem_ticket === false || r.redeem_ticket === null
+      );
+    }
+    // if both toggles ON → show all (do nothing)
 
     setRegistrations(filtered);
   };
@@ -395,7 +407,7 @@ export default function AdminDashboard() {
                 fontWeight: "bold",
               }}
             >
-              Total Registration Rows: {registrations.length}
+              Number of Registration: {registrations.length}
             </div>
           </div>
 
@@ -403,22 +415,37 @@ export default function AdminDashboard() {
             style={{
               margin: "1rem 0",
               display: "flex",
-              gap: "8px",
+              gap: "10px",
               alignItems: "center",
+              flexWrap: "wrap",
+              background: "#fafafa",
+              padding: "10px",
+              borderRadius: "8px",
+              border: "1px solid #ddd",
             }}
           >
             {/* Search input */}
             <input
-              style={{ ...inputStyle, width: "200px" }}
+              style={{
+                ...inputStyle,
+                width: "200px",
+                border: "1px solid #ccc",
+                borderRadius: "6px",
+              }}
               type="text"
               placeholder="Search IC or phone..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
 
-            {/* Dropdown for party filter */}
+            {/* Party filter */}
             <select
-              style={{ ...inputStyle, width: "280px" }} // ⬅️ increase width here
+              style={{
+                ...inputStyle,
+                width: "220px",
+                border: "1px solid #ccc",
+                borderRadius: "6px",
+              }}
               value={selectedParty}
               onChange={(e) => setSelectedParty(e.target.value)}
             >
@@ -430,14 +457,61 @@ export default function AdminDashboard() {
               ))}
             </select>
 
-            <button style={flatBtn} onClick={handleSearch}>
+            {/* Redeem filter */}
+            <select
+              style={{
+                ...inputStyle,
+                width: "180px",
+                border: "1px solid #ccc",
+                borderRadius: "6px",
+              }}
+              value={
+                showRedeemed && showNotRedeemed
+                  ? "All"
+                  : showRedeemed
+                  ? "Redeemed"
+                  : showNotRedeemed
+                  ? "Not Redeemed"
+                  : "All"
+              }
+              onChange={(e) => {
+                if (e.target.value === "Redeemed") {
+                  setShowRedeemed(true);
+                  setShowNotRedeemed(false);
+                } else if (e.target.value === "Not Redeemed") {
+                  setShowRedeemed(false);
+                  setShowNotRedeemed(true);
+                } else {
+                  setShowRedeemed(true);
+                  setShowNotRedeemed(true);
+                }
+              }}
+            >
+              <option value="All">All Tickets</option>
+              <option value="Redeemed">✅ Redeemed</option>
+              <option value="Not Redeemed">❌ Not Redeemed</option>
+            </select>
+
+            {/* Action buttons */}
+            <button
+              style={{
+                ...flatBtn,
+                borderRadius: "6px",
+              }}
+              onClick={handleSearch}
+            >
               Search
             </button>
             <button
-              style={btn}
+              style={{
+                ...btn,
+                borderRadius: "6px",
+              }}
               onClick={() => {
                 setSearchTerm("");
                 setSelectedParty("All");
+                setShowRedeemed(true);
+                setShowNotRedeemed(true);
                 fetchRegistrations();
               }}
             >
